@@ -243,6 +243,9 @@ def simple_grammar_fixes(text):
 def correct_sentence(sentence: str) -> str:
     return simple_grammar_fixes(sentence)
 
+def apply_grammar_pipeline(text: str) -> str:
+    return correct_sentence(text)
+
 if __name__ == "__main__":
     print("Grammar Corrector CLI. Type a sentence and press Enter (type 'exit' to quit):\n")
     while True:
@@ -250,7 +253,7 @@ if __name__ == "__main__":
             user_input = input("Input: ")
             if user_input.strip().lower() == "exit":
                 break
-            corrected = correct_sentence(user_input)
+            corrected = apply_grammar_pipeline(user_input)
             print(f"Corrected: {corrected}\n")
         except KeyboardInterrupt:
             print("\nExiting.")

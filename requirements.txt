@@ -1,0 +1,8 @@
+transformers>=4.40.1
+torch>=2.2.2
+wordfreq>=3.0.3
+nltk>=3.8.1
+spacy>=3.8.4
+sentence-transformers>=2.6.1
+errant>=2.3.4
+inflect==7.2.0
