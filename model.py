@@ -13,24 +13,19 @@ def similarity(a, b):
 from wordfreq import word_frequency
 from transformers import pipeline
 
-DEBUG = True  # Set to False to disable debug prints
+DEBUG = True 
 
-# Download word list if not already downloaded
 nltk.download('words')
 
-# Load word list into a set for fast lookup
 word_list = set(words.words())
 fill_mask = pipeline("fill-mask", model="bert-base-uncased")
 
-# Tokenizer: splits input into words
 def tokenize(text):
     return re.findall(r"\b\w+\b|[^\w\s]", text)
 
-# Check if a word is not in the dictionary
 def is_misspelled(word):
     return word.lower() not in word_list
 
-# Suggest closest words using Levenshtein-like fuzzy match
 def suggest(word):
     suggestions = get_close_matches(word, word_list, n=5, cutoff=0.8)
     if suggestions:
@@ -44,17 +39,13 @@ def reduce_repeated_letters(word):
     """
     original = word
     candidate = word
-    # Limit iterations to avoid infinite loops
     for _ in range(3):
-        # For each group of repeated letters, reduce the count by one
         new_candidate = re.sub(r'(.)\1+', lambda m: m.group(1) * (len(m.group(0)) - 1), candidate)
-        # If no change, break out of loop
         if new_candidate == candidate:
             break
         candidate = new_candidate
         if candidate.lower() in word_list:
             return candidate
-    # If no valid word found, return the best candidate
     return candidate
 
 def apply_grammar_rules(token, index):
@@ -75,7 +66,6 @@ def context_suggest(sentence, index, original_word):
         for suggestion in suggestions:
             predicted = suggestion['token_str'].strip()
             score = suggestion['score']
-            # Check that prediction is in dictionary and not the same word
             if predicted.lower() in word_list and predicted.lower() != original_word.lower():
                 return predicted, score
     except:
@@ -175,7 +165,6 @@ def iterative_correct(sentence, max_iter=5):
         current_sentence = corrected
     return current_sentence
 
-# 🔍 Test the spell checker
 if __name__ == "__main__":
     print("Spell & Grammar Correction CLI. Type a sentence and press Enter (type 'exit' to quit):\n")
     while True:
