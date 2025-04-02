@@ -10,6 +10,8 @@ import spacy as errant_spacy
 from transformers import BertTokenizer, BertModel
 import torch
 
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
 with open("conjugation_map.json") as f:
     conjugation_map = json.load(f)
 
@@ -18,8 +20,15 @@ nlp = spacy.load("en_core_web_sm")
 ml_model_name = "prithivida/grammar_error_correcter_v1"
 ml_tokenizer = AutoTokenizer.from_pretrained(ml_model_name)
 ml_model = AutoModelForSeq2SeqLM.from_pretrained(ml_model_name)
+style_model = AutoModelForSeq2SeqLM.from_pretrained("prithivida/parrot_paraphraser_on_T5")
+style_tokenizer = AutoTokenizer.from_pretrained("prithivida/parrot_paraphraser_on_T5")
 grammar_classifier = pipeline("text-classification", model="textattack/bert-base-uncased-CoLA")
 sbert_model = SentenceTransformer("all-MiniLM-L6-v2")
+
+def casualize_text(text: str) -> str:
+    input_ids = style_tokenizer.encode(f"paraphrase: {text}", return_tensors="pt", max_length=128, truncation=True)
+    output_ids = style_model.generate(input_ids, max_length=128, num_beams=5, num_return_sequences=1)
+    return style_tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
 def is_ungrammatical(text):
     try:
@@ -194,29 +203,41 @@ def analyze_edits(source, corrected):
     edits = annotator.annotate(orig_doc, cor_doc)
     return [str(edit) for edit in edits]
 
-def simple_grammar_fixes(text):
+def multi_pass_grammar_fixes(text, level="core"):
+    core_rules = [
+        subject_verb_agreement_rule,
+        plural_was_were_rule,
+        i_has_rule,
+        third_person_have_rule,
+        dont_doesnt_rule,
+        i_is_am_rule,
+        plural_subject_is_are_rule,
+        correct_went_vs_gone_rule,
+        do_does_rule,
+        their_there_was_rule
+    ]
+
+    advanced_rules = [
+        article_before_vowel_rule,
+        article_an_rule,
+        their_theyre_possessive_rule,
+        add_be_verb_rule,
+        base_verb_s_rule,
+        modal_should_have_rule,
+        fix_have_went_after_modal
+    ]
+
+    rules_to_apply = core_rules
+
+    if "advanced" in level:
+        rules_to_apply += advanced_rules
+
     def apply_rules(text):
         score = 0
         doc = nlp(text)
-        text, delta = subject_verb_agreement_rule(text, doc); score += delta
-        text, delta = plural_was_were_rule(text); score += delta
-        text, delta = i_has_rule(text); score += delta
-        text, delta = third_person_have_rule(text); score += delta
-        text, delta = dont_doesnt_rule(text); score += delta
-        doc = nlp(text)
-        text, delta = article_before_vowel_rule(text, doc); score += delta
-        text, delta = article_an_rule(text); score += delta
-        doc = nlp(text)
-        text, delta = their_theyre_possessive_rule(text, doc); score += delta
-        text, delta = i_is_am_rule(text); score += delta
-        text, delta = plural_subject_is_are_rule(text); score += delta
-        text, delta = correct_went_vs_gone_rule(text); score += delta
-        text, delta = do_does_rule(text); score += delta
-        text, delta = their_there_was_rule(text); score += delta
-        text, delta = add_be_verb_rule(text); score += delta
-        text, delta = base_verb_s_rule(text); score += delta
-        text, delta = modal_should_have_rule(text); score += delta
-        text, delta = fix_have_went_after_modal(text); score += delta
+        for rule in rules_to_apply:
+            text, delta = rule(text, doc) if 'doc' in rule.__code__.co_varnames else rule(text)
+            score += delta
         return text, score
 
     # Pass 1: Rules
@@ -241,19 +262,35 @@ def simple_grammar_fixes(text):
     return final_output
 
 def correct_sentence(sentence: str) -> str:
-    return simple_grammar_fixes(sentence)
+    return multi_pass_grammar_fixes(sentence)
 
-def apply_grammar_pipeline(text: str) -> str:
-    return correct_sentence(text)
+def apply_style(text: str, style: str = "none") -> str:
+    if style == "casual":
+        return casualize_text(text)
+    elif style == "formal":
+        return correct_sentence(text)
+    return text
+
+def apply_grammar_pipeline(text: str, style: str = "none") -> str:
+    styled_text = apply_style(text, style)
+    return correct_sentence(styled_text)
 
 if __name__ == "__main__":
     print("Grammar Corrector CLI. Type a sentence and press Enter (type 'exit' to quit):\n")
+    print("Select style transformation:")
+    print("  [none]  - No style change")
+    print("  [casual] - Formal → Casual")
+    print("  [formal] - Casual → Formal (grammar-focused)")
+    style_choice = input("Enter choice [none/casual/formal]: ").strip().lower()
+    if style_choice not in {"none", "casual", "formal"}:
+        print("Invalid choice. Defaulting to 'none'.")
+        style_choice = "none"
     while True:
         try:
             user_input = input("Input: ")
             if user_input.strip().lower() == "exit":
                 break
-            corrected = apply_grammar_pipeline(user_input)
+            corrected = apply_grammar_pipeline(user_input, style=style_choice)
             print(f"Corrected: {corrected}\n")
         except KeyboardInterrupt:
             print("\nExiting.")
